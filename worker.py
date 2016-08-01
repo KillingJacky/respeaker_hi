@@ -7,12 +7,17 @@ import Queue
 import time
 import re
 import random
+from monotonic import monotonic
 
 class Worker(threading.Thread):
     def __init__(self, queue_len = 10):
         threading.Thread.__init__(self)
         self.q = Queue.Queue(queue_len)
         self.thread_stop = False
+
+        self.last_time_broadcast = 0
+        self.human_around = False
+        self.humidity = 0
 
     def set_tts(self, tts):
         self.tts = tts
@@ -32,18 +37,32 @@ class Worker(threading.Thread):
         except Exception as e:
             print e
 
-    def hook(self):
+    def loop(self):
         """
         do stuff in the thread loop
         """
-        chance = random.randint(0, 100)
-        if chance < 10:
-            print 'the plants need water.'
-            self.play_text("Hi, my soil humidity is now less than %d%%, I think it's time for you to water the plants." % (chance,))
+        now = monotonic()
+        if now - self.last_time_broadcast > 60 and self.human_around:
+            self.last_time_broadcast = now
+
+            if self.humidity < 20.0:
+                print 'the plants need water.'
+                self.play_text("Hi, my soil humidity is now less than 20%, I think it's time for you to water the plants.")
+
+        # TODO: read from arduino
+        self.humidity = 19.0
+
+        # TODO: read from arduino
+        self.human_around = True
+
+        # chance = random.randint(0, 100)
+        # if chance < 10:
+        #     print 'the plants need water.'
+        #     self.play_text("Hi, my soil humidity is now less than %d%%, I think it's time for you to water the plants." % (chance,))
 
     def run(self):
         while not self.thread_stop:
-            self.hook()
+            self.loop()
             cmd = ''
             try:
                 cmd = self.q.get(timeout=1)
@@ -58,8 +77,8 @@ class Worker(threading.Thread):
 
     def _parse_cmd(self, cmd):
         if re.search(r'how.*(plant|plants|plans).*(going|doing)?', cmd) or re.search(r'check.*(plant|plants|plans).*', cmd):
-            print 'they are good'
-            self.play_text('they are good.')
+            resp = 'they are good, the soil humidity is now %.1f percent' % self.humidity
+            self.play_text(resp)
         elif re.search(r'thank you', cmd):
             self.play_text("you're welcome!")
         elif re.search(r'how(\'re)?.*(are)?.*you', cmd):
