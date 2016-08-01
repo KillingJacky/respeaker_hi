@@ -29,8 +29,8 @@ mission_completed = False
 awake = False
 
 pa = pyaudio.PyAudio()
-mic = Microphone(pa)
 player = Player(pa)
+mic = Microphone(pa, player=player)
 
 worker = Worker()
 worker.set_tts(tts)
@@ -61,15 +61,21 @@ while not mission_completed:
 
     data = mic.listen()
 
+    if not data:
+        awake = False
+        continue
+
     # recognize speech using Microsoft Bing Voice Recognition
     try:
         text = recognizer.recognize(data, language='en-US')
         print('Bing:' + text.encode('utf-8'))
         worker.push_cmd(text)
-        # let's go ahead, don't wait the poor slow worker
+        worker.wait_done()
+        if text.find('bye bye') > -1:
+            handle_int(0,0)
     except UnknownValueError:
         print("Microsoft Bing Voice Recognition could not understand audio")
     except RequestError as e:
         print("Could not request results from Microsoft Bing Voice Recognition service; {0}".format(e))
 
-    awake = False
+time.sleep(2)

@@ -6,10 +6,13 @@ import json
 import uuid
 import wave
 import io
+import hashlib
 from monotonic import monotonic
 from urllib import urlencode
 from urllib2 import Request, urlopen, URLError, HTTPError
 from bing_base import *
+
+CACHE_SIZE = 2*1024*1024  #2M
 
 class BingTTS():
     def __init__(self, bing_base):
@@ -36,7 +39,9 @@ class BingTTS():
             "zh-TW":{"Female": "Microsoft Server Speech Text to Speech Voice (zh-TW, Yating, Apollo)","Male": "Microsoft Server Speech Text to Speech Voice (zh-TW, Zhiwei, Apollo)"}
         }
 
-    def speech(self, text, language="en-US", gender="Female"):
+        self.cache = {}
+
+    def speak(self, text, language="en-US", gender="Female"):
         access_token = self.bing_base.token()
 
         if language not in self.locales.keys():
@@ -51,6 +56,16 @@ class BingTTS():
             gender = lang.keys()[0]
 
         service_name = lang[gender]
+
+        hasher = hashlib.sha1()
+        hasher.update(text+language+gender)
+        sha1 = hasher.hexdigest()
+
+        if sha1 in self.cache:
+            print '[TTS wave from cache]'
+            # [size, data, ref_cnt]
+            self.cache[sha1][2] += 1
+            return self.cache[sha1][1]
 
         body = "<speak version='1.0' xml:lang='en-us'>\
                 <voice xml:lang='%s' xml:gender='%s' name='%s'>%s</voice>\
@@ -74,9 +89,34 @@ class BingTTS():
             raise RequestError("tts connection failed: {0}".format(e.reason))
 
         data = response.read()
-        print("The synthesized wave length: %d" %(len(data)))
+        size = len(data)
+        print "[TTS wave length: %dkB]" %(size/1024),
+
+        self.cache_wave(sha1, data, size)
 
         return data
+
+    def _sum_cache(self):
+        sum = 0
+        for k,v in self.cache.items():
+            sum += v[0]
+        return sum
+
+    def cache_wave(self, sha, data, size):
+        overflow = self._sum_cache() + size - CACHE_SIZE
+        to_be_del = []
+        if overflow > 0:
+            lst = sorted(self.cache.items(), key=lambda t: t[1][2])
+            while overflow > 0 and len(lst) > 0:
+                garbage = lst.pop(0)
+                to_be_del.append(garbage[0])
+                overflow -= garbage[1][0]
+            for d in to_be_del:
+                del self.cache[d]
+
+        #print self.cache.keys()
+        # [size, data, ref_cnt]
+        self.cache[sha] = [size, data, 0]
 
 
 if __name__ == '__main__':
@@ -106,7 +146,7 @@ if __name__ == '__main__':
 
     # recognize speech using Microsoft Bing Voice Recognition
     try:
-        data = tts.speech(sys.argv[1], language='en-US')
+        data = tts.speak(sys.argv[1], language='en-US')
         player.play_buffer(data)
     except LocaleError as e:
         print e

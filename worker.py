@@ -6,6 +6,7 @@ import threading
 import Queue
 import time
 import re
+import random
 
 class Worker(threading.Thread):
     def __init__(self, queue_len = 10):
@@ -22,11 +23,23 @@ class Worker(threading.Thread):
     def push_cmd(self, cmd):
         self.q.put(cmd)
 
+    def wait_done(self):
+        self.q.join()
+
+    def play_text(self, text):
+        try:
+            self.player.play_buffer(self.tts.speak(text))
+        except Exception as e:
+            print e
+
     def hook(self):
         """
         do stuff in the thread loop
         """
-        pass
+        chance = random.randint(0, 100)
+        if chance < 10:
+            print 'the plants need water.'
+            self.play_text("Hi, my soil humidity is now less than %d%%, I think it's time for you to water the plants." % (chance,))
 
     def run(self):
         while not self.thread_stop:
@@ -44,11 +57,18 @@ class Worker(threading.Thread):
                 print("still got %d commands to execute." % (len,))
 
     def _parse_cmd(self, cmd):
-        if re.match(r'how.*(plant|plants).*(going|doing)?', cmd) or re.match(r'check.*(plant|plants).*', cmd):
+        if re.search(r'how.*(plant|plants|plans).*(going|doing)?', cmd) or re.search(r'check.*(plant|plants|plans).*', cmd):
             print 'they are good'
-            self.player.play_buffer(self.tts.speech('they are good.'))
+            self.play_text('they are good.')
+        elif re.search(r'thank you', cmd):
+            self.play_text("you're welcome!")
+        elif re.search(r'how(\'re)?.*(are)?.*you', cmd):
+            self.play_text("good, thank you.")
+        elif re.search(r'bye bye', cmd):
+            self.play_text("bye!")
         else:
             print 'unknown command, ignore.'
+            self.play_text("I don't know your command.")
 
     def stop(self):
         self.thread_stop = True

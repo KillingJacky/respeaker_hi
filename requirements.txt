@@ -1,0 +1,4 @@
+monotonic
+webrtcvad
+pyaudio
+pocketsphinx

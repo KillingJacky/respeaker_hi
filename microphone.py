@@ -3,6 +3,7 @@ import webrtcvad
 import collections
 import sys
 import os
+import platform
 from pocketsphinx.pocketsphinx import *
 import time
 import Queue
@@ -27,9 +28,10 @@ script_dir = os.path.dirname(os.path.realpath(__file__))
 
 
 class Microphone():
-    def __init__(self, pa, level=3):
+    def __init__(self, pa, level=3, player=None):
         self.queue = Queue.Queue()
         self.pa = pa
+        self.player = player
         self.stream = self.pa.open(format=FORMAT,
                                     channels=CHANNELS,
                                     rate=RATE,
@@ -49,7 +51,10 @@ class Microphone():
         config.set_string('-dict', os.path.join(script_dir, 'model/respeaker.dic'))
         config.set_string('-keyphrase', 'Respeaker')
         config.set_float('-kws_threshold', 1e-30)
-        config.set_int('-samprate', RATE)
+        if platform.system() == 'Darwin':
+            config.set_float('-samprate', float(RATE))
+        else:
+            config.set_int('-samprate', RATE)
         config.set_int('-nfft', 2048)
         config.set_string("-logfn", os.devnull)
         self.decoder = Decoder(config)
@@ -64,7 +69,11 @@ class Microphone():
         self.max_duration = 9000
 
     def capture_callback(self, data, frame_count, time_info, status):
-        active = self.vad.is_speech(data, RATE)
+        # if player is playing something, mic should be deaf
+        if self.player and not self.player.idle_state:
+            active = False
+        else:
+            active = self.vad.is_speech(data, RATE)
         sys.stdout.write('1' if active else '0')
         self.ring_buffer_flags[self.ring_buffer_index] = 1 if active else 0
         self.ring_buffer_index += 1
@@ -93,7 +102,8 @@ class Microphone():
         sys.stdout.flush()
         return None, pyaudio.paContinue
 
-    def listen(self, max_duration=9000):
+    def listen(self, timeout=12):
+        print '[listen]'
         self.ring_buffer.clear()
         self.triggered = False
         self.ring_buffer_flags = [0] * PADDING_FRAMES
@@ -105,8 +115,12 @@ class Microphone():
         frames = []
         self.stream.start_stream()
         while not self.quit:
-            data, ending = self.queue.get()
-            frames.append(data)
+            try:
+                data, ending = self.queue.get(timeout=timeout)
+            except:
+                break
+            if data:
+                frames.append(data)
             if ending:
                 break
 
@@ -114,6 +128,7 @@ class Microphone():
         return b''.join(frames)
 
     def detect(self, keyphrase='Respeaker'):
+        print '[detect]'
         detected = False
 
         self.triggered = False
@@ -128,7 +143,7 @@ class Microphone():
                 self.decoder.start_utt()
                 self.decoder_need_restart = False
 
-            data, ending = self.queue.get()
+            data, ending = self.queue.get(timeout=0xffffffff)
             if not data:
                 break
 
