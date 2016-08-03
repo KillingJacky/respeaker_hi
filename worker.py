@@ -7,7 +7,12 @@ import Queue
 import time
 import re
 import random
+import json
 from monotonic import monotonic
+from urllib import urlencode
+from urllib2 import Request, urlopen, URLError, HTTPError
+
+WIO_TOKEN = "1e9f7584c27264ab5bf55f3975b67870"
 
 class Worker(threading.Thread):
     def __init__(self, queue_len = 10):
@@ -49,11 +54,36 @@ class Worker(threading.Thread):
                 print 'the plants need water.'
                 self.play_text("Hi, my soil humidity is now less than 20%, I think it's time for you to water the plants.")
 
-        # TODO: read from arduino
-        self.humidity = 19.0
+        # read from wio
+        self.humidity = 19.0  # this is faked for better expression of the demo
+        url = "https://cn.wio.seeed.io/v1/node/GroveMoistureA0/moisture?access_token=%s" % (WIO_TOKEN,)
+        request = Request(url)
+        try:
+            response = urlopen(request)
+            data = response.read()
+            result = json.loads(data)
+            if result['moisture']:
+                #self.humidity = result['moisture']
+                print 'moisture raw:', result['moisture']
+        except Exception as e:
+            print e
+            pass
 
-        # TODO: read from arduino
-        self.human_around = True
+        # read from wio
+        url = "https://cn.wio.seeed.io/v1/node/GrovePIRMotionD0/approach?access_token=%s" % (WIO_TOKEN,)
+        request = Request(url)
+        try:
+            response = urlopen(request)
+            data = response.read()
+            result = json.loads(data)
+            if result['approach']:
+                self.human_around = True
+                print 'human around'
+            else:
+                self.human_around = False
+        except Exception as e:
+            print e
+            pass
 
         # chance = random.randint(0, 100)
         # if chance < 10:
