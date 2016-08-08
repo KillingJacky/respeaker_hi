@@ -29,8 +29,10 @@ mission_completed = False
 awake = False
 
 pa = pyaudio.PyAudio()
+mic = Microphone(pa)
 player = Player(pa)
-mic = Microphone(pa, player=player)
+mic.player = player
+
 
 worker = Worker()
 worker.set_tts(tts)
@@ -72,6 +74,8 @@ while not mission_completed:
         worker.push_cmd(text)
         worker.wait_done()
         if text.find('bye bye') > -1:
+            awake = False
+        elif text.find('shut down') > -1:
             handle_int(0,0)
     except UnknownValueError:
         print("Microsoft Bing Voice Recognition could not understand audio")

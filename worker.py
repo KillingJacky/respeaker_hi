@@ -115,6 +115,8 @@ class Worker(threading.Thread):
             self.play_text("good, thank you.")
         elif re.search(r'bye bye', cmd):
             self.play_text("bye!")
+        elif re.search(r'shut.*down', cmd):
+            self.play_text("see you next time")
         else:
             print 'unknown command, ignore.'
             self.play_text("I don't know your command.")
